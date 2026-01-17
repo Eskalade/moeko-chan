@@ -4,7 +4,9 @@ const {
 	Tray,
 	Menu,
 	screen,
-	globalShortcut
+	globalShortcut,
+	desktopCapturer,
+	session
 } = require("electron")
 const path = require("path")
 
@@ -32,7 +34,10 @@ function createWindow() {
 		hasShadow: false,
 		webPreferences: {
 			nodeIntegration: false,
-			contextIsolation: true
+			contextIsolation: true,
+			// Enable desktop audio capture on Windows/Linux
+			enableWebRTC: true,
+			allowDisplayingInsecureContent: true
 		}
 	})
 
@@ -56,7 +61,7 @@ function createWindow() {
 
 function createTray() {
 	// Use a simple icon (you can replace with your own)
-	tray = new Tray(path.join(__dirname, "icon.png"))
+	tray = new Tray(path.join(__dirname, "icon.jpg"))
 
 	const contextMenu = Menu.buildFromTemplate([
 		{
@@ -87,6 +92,17 @@ function createTray() {
 }
 
 app.whenReady().then(() => {
+	// Enable desktop audio capture for Windows/Linux
+	session.defaultSession.setPermissionRequestHandler(
+		(webContents, permission, callback) => {
+			if (permission === "media") {
+				callback(true)
+			} else {
+				callback(false)
+			}
+		}
+	)
+
 	createWindow()
 	createTray()
 

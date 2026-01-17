@@ -34,7 +34,9 @@ const FRAME_SPEEDS: Record<Mood, number> = {
 }
 
 export default function DesktopPage() {
-  const [inputMode, setInputMode] = useState<"system" | "microphone">("microphone")
+  const [inputMode, setInputMode] = useState<"system" | "microphone">(
+    "microphone"
+  )
   const [showControls, setShowControls] = useState(false)
   const [useCustomSprites, setUseCustomSprites] = useState(true)
   const [showDebug, setShowDebug] = useState(false)
