@@ -1,0 +1,559 @@
+"use client"
+
+import type React from "react"
+import { useState, useEffect, useRef } from "react"
+import { useAudioCapture, type AudioData, type Mood } from "@/hooks/use-audio-capture"
+import { Mic, Monitor, GripVertical, Bug, ImageIcon } from "lucide-react"
+
+const SPRITE_FRAMES: Record<Mood, string[]> = {
+  chill: ["/sprites/chill-1.png", "/sprites/chill-2.png"],
+  happy: ["/sprites/happy-1.png", "/sprites/happy-2.png", "/sprites/happy-3.png"],
+  sad: ["/sprites/sad-1.png", "/sprites/sad-2.png"],
+  energetic: [
+    "/sprites/energetic-1.png",
+    "/sprites/energetic-2.png",
+    "/sprites/energetic-3.png",
+    "/sprites/energetic-4.png",
+  ],
+}
+
+// Fallback single sprites if frames not available
+const MOOD_SPRITES: Record<Mood, string> = {
+  chill: "/sprites/chill.png",
+  happy: "/sprites/happy.png",
+  sad: "/sprites/sad.png",
+  energetic: "/sprites/energetic.png",
+}
+
+const FRAME_SPEEDS: Record<Mood, number> = {
+  chill: 800, // Slow gentle sway
+  happy: 200, // Bouncy
+  sad: 1200, // Very slow breathing
+  energetic: 100, // Fast headbang
+}
+
+export default function DesktopPage() {
+  const [inputMode, setInputMode] = useState<"system" | "mic">("mic")
+  const [showControls, setShowControls] = useState(false)
+  const [useCustomSprites, setUseCustomSprites] = useState(true)
+  const [showDebug, setShowDebug] = useState(false)
+  const [spritesLoaded, setSpritesLoaded] = useState(false)
+  const [hasFrameSprites, setHasFrameSprites] = useState(false)
+  const [spriteError, setSpriteError] = useState<string | null>(null)
+  const { isListening, audioData, error, startCapture, stopCapture } = useAudioCapture(inputMode)
+
+  useEffect(() => {
+    const checkSprites = async () => {
+      // Check single sprites
+      try {
+        const response = await fetch(MOOD_SPRITES.chill, { method: "HEAD" })
+        if (response.ok) {
+          setSpritesLoaded(true)
+          setSpriteError(null)
+        } else {
+          throw new Error("Single sprites not found")
+        }
+      } catch {
+        setSpritesLoaded(false)
+        setSpriteError("Add sprites to /public/sprites/ (chill.png, happy.png, sad.png, energetic.png)")
+        setUseCustomSprites(false)
+      }
+
+      // Check frame sprites
+      try {
+        const response = await fetch(SPRITE_FRAMES.chill[0], { method: "HEAD" })
+        if (response.ok) {
+          setHasFrameSprites(true)
+        }
+      } catch {
+        setHasFrameSprites(false)
+      }
+    }
+    checkSprites()
+  }, [])
+
+  return (
+    <div
+      className="w-full h-screen bg-transparent overflow-hidden select-none"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      {/* Drag handle */}
+      <div
+        className="absolute top-0 left-0 right-0 h-8 flex items-center justify-center cursor-move"
+        style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+      >
+        <GripVertical
+          className={`w-4 h-4 text-white/50 transition-opacity ${showControls ? "opacity-100" : "opacity-0"}`}
+        />
+      </div>
+
+      {/* Mini controls */}
+      <div
+        className={`absolute top-2 right-2 flex gap-1 transition-opacity ${showControls ? "opacity-100" : "opacity-0"}`}
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <button
+          onClick={() => setInputMode(inputMode === "mic" ? "system" : "mic")}
+          className="p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white/70 hover:text-white transition-all"
+          title={inputMode === "mic" ? "Switch to System Audio" : "Switch to Microphone"}
+        >
+          {inputMode === "mic" ? <Mic className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
+        </button>
+        <button
+          onClick={() => spritesLoaded && setUseCustomSprites(!useCustomSprites)}
+          className={`p-1.5 rounded-full transition-all ${
+            spritesLoaded
+              ? useCustomSprites
+                ? "bg-green-500/70 text-white"
+                : "bg-black/50 hover:bg-black/70 text-white/70 hover:text-white"
+              : "bg-red-500/50 text-white/50 cursor-not-allowed"
+          }`}
+          title={spritesLoaded ? "Toggle custom sprites" : "Add sprites to /public/sprites/"}
+        >
+          <ImageIcon className="w-3 h-3" />
+        </button>
+        <button
+          onClick={() => setShowDebug(!showDebug)}
+          className={`p-1.5 rounded-full transition-all ${showDebug ? "bg-yellow-500/70 text-black" : "bg-black/50 hover:bg-black/70 text-white/70 hover:text-white"}`}
+          title="Toggle debug info"
+        >
+          <Bug className="w-3 h-3" />
+        </button>
+      </div>
+
+      {spriteError && showControls && (
+        <div
+          className="absolute top-10 left-2 right-2 bg-orange-500/90 text-white text-xs p-2 rounded"
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
+          {spriteError}
+        </div>
+      )}
+
+      {/* Debug panel */}
+      {showDebug && isListening && (
+        <div
+          className={`absolute ${spriteError && showControls ? "top-24" : "top-12"} left-2 right-2 bg-black/80 rounded-lg p-2 text-xs font-mono text-white/90 space-y-1`}
+          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+        >
+          <div className="flex justify-between">
+            <span>BPM:</span>
+            <span className={audioData.bpm > 0 ? "text-green-400" : "text-red-400"}>
+              {audioData.bpm > 0 ? audioData.bpm : "detecting..."}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Genre:</span>
+            <span className="text-cyan-400">{audioData.genre}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Mood:</span>
+            <span
+              className={`${
+                audioData.mood === "chill"
+                  ? "text-blue-400"
+                  : audioData.mood === "happy"
+                    ? "text-yellow-400"
+                    : audioData.mood === "sad"
+                      ? "text-purple-400"
+                      : "text-orange-400"
+              }`}
+            >
+              {audioData.mood}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Energy:</span>
+            <div className="flex items-center gap-1">
+              <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-green-400 transition-all duration-100"
+                  style={{ width: `${audioData.energy * 100}%` }}
+                />
+              </div>
+              <span className="text-white/60">{(audioData.energy * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <div className="flex justify-between">
+            <span>Bass:</span>
+            <div className="flex items-center gap-1">
+              <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-red-400 transition-all duration-100"
+                  style={{ width: `${audioData.bassLevel * 100}%` }}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-between">
+            <span>Active:</span>
+            <span className={audioData.isActive ? "text-green-400" : "text-red-400"}>
+              {audioData.isActive ? "YES" : "NO"}
+            </span>
+          </div>
+          <div className="flex justify-between">
+            <span>Sprites:</span>
+            <span className={spritesLoaded ? "text-green-400" : "text-red-400"}>
+              {hasFrameSprites ? "Frames" : spritesLoaded ? "Single" : "Not found"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Character */}
+      <div className={`w-full h-full flex items-center justify-center ${showDebug && isListening ? "pt-40" : "pt-4"}`}>
+        <DesktopBuddy
+          audioData={audioData}
+          isActive={isListening}
+          useCustomSprites={useCustomSprites && spritesLoaded}
+          hasFrameSprites={hasFrameSprites}
+        />
+      </div>
+
+      {/* Start/Stop button */}
+      <div
+        className={`absolute bottom-4 left-1/2 -translate-x-1/2 transition-opacity ${showControls || !isListening ? "opacity-100" : "opacity-0"}`}
+        style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+      >
+        <button
+          onClick={() => (isListening ? stopCapture() : startCapture())}
+          className={`px-4 py-2 rounded-full text-xs font-medium transition-all ${
+            isListening
+              ? "bg-red-500/80 hover:bg-red-500 text-white"
+              : "bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm"
+          }`}
+        >
+          {isListening ? "Stop" : "Start Vibing"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="absolute bottom-16 left-2 right-2 bg-red-500/80 text-white text-xs p-2 rounded">{error}</div>
+      )}
+    </div>
+  )
+}
+
+interface DesktopBuddyProps {
+  audioData: AudioData
+  isActive: boolean
+  useCustomSprites: boolean
+  hasFrameSprites: boolean
+}
+
+function DesktopBuddy({ audioData, isActive, useCustomSprites, hasFrameSprites }: DesktopBuddyProps) {
+  const [displayedMood, setDisplayedMood] = useState<Mood>("chill")
+  const [currentFrame, setCurrentFrame] = useState(0)
+  const [bounce, setBounce] = useState(0)
+  const [rotation, setRotation] = useState(0)
+  const [scale, setScale] = useState({ x: 1, y: 1 })
+
+  const moodHistoryRef = useRef<Mood[]>([])
+  const lastMoodChangeRef = useRef(Date.now())
+  const MOOD_CHANGE_DELAY = 8000 // 8 seconds before mood can change
+  const MOOD_HISTORY_SIZE = 100 // Track last 100 readings
+
+  const frameTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const animationRef = useRef<number | null>(null)
+  const timeRef = useRef(0)
+  const lastBeatRef = useRef(0)
+  const bounceVelocityRef = useRef(0)
+  const bouncePositionRef = useRef(0)
+  const rotationRef = useRef(0)
+
+  useEffect(() => {
+    if (!isActive) return
+
+    // Add current mood to history
+    moodHistoryRef.current.push(audioData.mood)
+    if (moodHistoryRef.current.length > MOOD_HISTORY_SIZE) {
+      moodHistoryRef.current.shift()
+    }
+
+    const timeSinceLastChange = Date.now() - lastMoodChangeRef.current
+
+    // Only consider changing mood after minimum delay
+    if (timeSinceLastChange < MOOD_CHANGE_DELAY) return
+
+    // Count moods in recent history
+    const moodCounts: Record<Mood, number> = { chill: 0, happy: 0, sad: 0, energetic: 0 }
+    moodHistoryRef.current.forEach((m) => moodCounts[m]++)
+
+    // Find dominant mood (needs 60% majority)
+    const total = moodHistoryRef.current.length
+    const threshold = total * 0.6
+
+    let dominantMood: Mood | null = null
+    for (const [mood, count] of Object.entries(moodCounts)) {
+      if (count >= threshold) {
+        dominantMood = mood as Mood
+        break
+      }
+    }
+
+    // Only change if there's a clear dominant mood different from current
+    if (dominantMood && dominantMood !== displayedMood) {
+      setDisplayedMood(dominantMood)
+      lastMoodChangeRef.current = Date.now()
+      moodHistoryRef.current = [] // Reset history after change
+    }
+  }, [audioData.mood, isActive, displayedMood])
+
+  useEffect(() => {
+    if (!isActive || !audioData.isActive) {
+      setDisplayedMood("chill")
+      setBounce(0)
+      setRotation(0)
+      setScale({ x: 1, y: 1 })
+      setCurrentFrame(0)
+      bounceVelocityRef.current = 0
+      bouncePositionRef.current = 0
+      rotationRef.current = 0
+      moodHistoryRef.current = []
+      lastMoodChangeRef.current = Date.now()
+    }
+  }, [isActive, audioData.isActive])
+
+  useEffect(() => {
+    if (!isActive || !hasFrameSprites) return
+
+    const frames = SPRITE_FRAMES[displayedMood]
+    const baseSpeed = FRAME_SPEEDS[displayedMood]
+
+    // Sync frame speed to BPM if available
+    const bpmSpeed = audioData.bpm > 0 ? 60000 / audioData.bpm / frames.length : baseSpeed
+    const speed = Math.max(80, Math.min(bpmSpeed, baseSpeed)) // Clamp between 80ms and base speed
+
+    frameTimerRef.current = setInterval(() => {
+      setCurrentFrame((prev) => (prev + 1) % frames.length)
+    }, speed)
+
+    return () => {
+      if (frameTimerRef.current) clearInterval(frameTimerRef.current)
+    }
+  }, [isActive, displayedMood, audioData.bpm, hasFrameSprites])
+
+  // Beat reaction
+  useEffect(() => {
+    if (audioData.beat && isActive) {
+      lastBeatRef.current = Date.now()
+
+      const intensity =
+        displayedMood === "energetic" ? -40 : displayedMood === "happy" ? -25 : displayedMood === "sad" ? -5 : -15
+
+      bounceVelocityRef.current = intensity * (0.8 + audioData.energy * 0.5)
+    }
+  }, [audioData.beat, audioData.energy, displayedMood, isActive])
+
+  // Physics animation loop
+  useEffect(() => {
+    if (!isActive) return
+
+    const animate = () => {
+      timeRef.current += 16
+
+      // Spring physics for bounce
+      const springStrength = 0.15
+      const damping = 0.8
+      bounceVelocityRef.current += -bouncePositionRef.current * springStrength
+      bounceVelocityRef.current *= damping
+      bouncePositionRef.current += bounceVelocityRef.current
+
+      // Gentle idle sway based on mood
+      let idleRotation = 0
+      if (displayedMood === "energetic") {
+        idleRotation = Math.sin(timeRef.current / 150) * 12
+      } else if (displayedMood === "happy") {
+        idleRotation = Math.sin(timeRef.current / 300) * 8
+      } else if (displayedMood === "chill") {
+        idleRotation = Math.sin(timeRef.current / 800) * 5
+      } else {
+        idleRotation = Math.sin(timeRef.current / 1500) * 2
+      }
+
+      rotationRef.current += (idleRotation - rotationRef.current) * 0.1
+
+      // Squash and stretch
+      const squashAmount = Math.abs(bouncePositionRef.current) * 0.012
+      const scaleY = 1 - squashAmount * 0.5
+      const scaleX = 1 + squashAmount * 0.3
+      const breathe = 1 + Math.sin(timeRef.current / 600) * 0.02
+
+      setBounce(bouncePositionRef.current)
+      setRotation(rotationRef.current)
+      setScale({ x: scaleX * breathe, y: scaleY * breathe })
+
+      animationRef.current = requestAnimationFrame(animate)
+    }
+
+    animationRef.current = requestAnimationFrame(animate)
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    }
+  }, [isActive, displayedMood])
+
+  const glowColors: Record<Mood, string> = {
+    chill: "rgba(34, 211, 238, 0.5)",
+    happy: "rgba(250, 204, 21, 0.5)",
+    sad: "rgba(129, 140, 248, 0.4)",
+    energetic: "rgba(251, 146, 60, 0.6)",
+  }
+
+  const getCurrentSprite = () => {
+    if (hasFrameSprites) {
+      const frames = SPRITE_FRAMES[displayedMood]
+      return frames[currentFrame] || frames[0]
+    }
+    return MOOD_SPRITES[displayedMood]
+  }
+
+  if (useCustomSprites) {
+    return (
+      <div className="relative">
+        {/* Glow effect */}
+        <div
+          className="absolute inset-0 rounded-full blur-3xl"
+          style={{
+            backgroundColor: glowColors[displayedMood],
+            transform: `scale(${1.5 + audioData.energy * 0.8 + (audioData.beat ? 0.3 : 0)})`,
+            opacity: 0.6 + audioData.energy * 0.4,
+            transition: "background-color 0.5s ease-out, transform 0.1s ease-out",
+          }}
+        />
+
+        {/* Animated sprite */}
+        <div
+          className="relative w-48 h-48"
+          style={{
+            transformOrigin: "center bottom",
+            transform: `
+              translateY(${bounce}px) 
+              rotate(${rotation}deg) 
+              scaleX(${scale.x}) 
+              scaleY(${scale.y})
+            `,
+          }}
+        >
+          <img
+            src={getCurrentSprite() || "/placeholder.svg"}
+            alt={`${displayedMood} buddy`}
+            className="w-full h-full object-contain"
+            style={{
+              filter: `drop-shadow(0 0 ${15 + audioData.energy * 20}px ${glowColors[displayedMood]})`,
+            }}
+            onError={(e) => {
+              // Fallback to single sprite if frame not found
+              e.currentTarget.src = MOOD_SPRITES[displayedMood]
+            }}
+          />
+        </div>
+      </div>
+    )
+  }
+
+  // Default blob character (same as before)
+  return (
+    <div
+      className="relative"
+      style={{
+        transform: `translateY(${bounce}px) rotate(${rotation}deg) scaleX(${scale.x}) scaleY(${scale.y})`,
+      }}
+    >
+      <div
+        className="absolute inset-0 rounded-full blur-2xl transition-all duration-500"
+        style={{
+          backgroundColor: glowColors[displayedMood],
+          transform: `scale(${1.2 + audioData.energy * 0.3})`,
+        }}
+      />
+      <div
+        className={`relative w-40 h-40 rounded-full transition-all duration-500 ${
+          displayedMood === "chill"
+            ? "bg-gradient-to-br from-cyan-400 to-blue-500"
+            : displayedMood === "happy"
+              ? "bg-gradient-to-br from-yellow-400 to-amber-500"
+              : displayedMood === "sad"
+                ? "bg-gradient-to-t from-indigo-400 to-purple-500"
+                : "bg-gradient-to-br from-orange-400 to-red-500"
+        }`}
+      >
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <div className="flex gap-6 -mt-2">
+            <BlobEye mood={displayedMood} beat={audioData.beat} />
+            <BlobEye mood={displayedMood} beat={audioData.beat} />
+          </div>
+          <div className="mt-3">
+            <BlobMouth mood={displayedMood} />
+          </div>
+          {(displayedMood === "happy" || displayedMood === "energetic") && (
+            <>
+              <div className="absolute left-5 top-1/2 w-5 h-2.5 rounded-full bg-pink-400/40" />
+              <div className="absolute right-5 top-1/2 w-5 h-2.5 rounded-full bg-pink-400/40" />
+            </>
+          )}
+        </div>
+        {/* Headphones */}
+        <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-44">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-36 h-6 border-t-[6px] border-slate-700 rounded-t-full" />
+          <div className="absolute -left-1 top-3 w-8 h-10 bg-slate-700 rounded-lg">
+            <div className="absolute inset-1 bg-slate-600 rounded" />
+          </div>
+          <div className="absolute -right-1 top-3 w-8 h-10 bg-slate-700 rounded-lg">
+            <div className="absolute inset-1 bg-slate-600 rounded" />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function BlobEye({ mood, beat }: { mood: Mood; beat: boolean }) {
+  const [blink, setBlink] = useState(false)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (Math.random() > 0.7) {
+        setBlink(true)
+        setTimeout(() => setBlink(false), 150)
+      }
+    }, 2500)
+    return () => clearInterval(interval)
+  }, [])
+
+  const squeezed = (beat && mood === "energetic") || blink
+
+  if (mood === "sad") {
+    return (
+      <div className="relative">
+        <div className={`w-5 ${squeezed ? "h-0.5" : "h-3"} bg-slate-800 rounded-full transition-all`} />
+        <div className="absolute -top-1.5 w-6 h-0.5 bg-slate-700 rounded-full -rotate-12" />
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`w-5 ${squeezed ? "h-0.5" : mood === "happy" ? "h-4" : "h-5"} bg-slate-800 rounded-full transition-all relative`}
+    >
+      {!squeezed && <div className="absolute top-0.5 left-1 w-1.5 h-1.5 bg-white rounded-full" />}
+    </div>
+  )
+}
+
+function BlobMouth({ mood }: { mood: Mood }) {
+  if (mood === "sad") {
+    return <div className="w-6 h-3 border-b-[3px] border-slate-800 rounded-b-full rotate-180" />
+  }
+  if (mood === "energetic") {
+    return (
+      <div className="w-8 h-5 bg-slate-800 rounded-full flex items-end justify-center pb-0.5">
+        <div className="w-5 h-1.5 bg-pink-400 rounded-full" />
+      </div>
+    )
+  }
+  if (mood === "happy") {
+    return <div className="w-8 h-4 border-b-[3px] border-slate-800 rounded-b-full" />
+  }
+  return <div className="w-5 h-2 border-b-[3px] border-slate-800 rounded-b-full" />
+}
