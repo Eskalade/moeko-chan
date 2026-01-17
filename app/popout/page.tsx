@@ -60,7 +60,7 @@ export default function PopoutPage() {
       {!isListening ? (
         <Button
           size="sm"
-          onClick={() => startCapture("microphone")}
+          onClick={() => startCapture()}
           className="bg-emerald-600 hover:bg-emerald-500 text-white rounded-full"
         >
           <Mic className="mr-2 h-4 w-4" />

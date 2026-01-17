@@ -1,5 +1,12 @@
 "use client"
 
+import {
+  logClassification,
+  logSmoothing,
+  updateDebugState,
+  type ClassificationDebugInfo,
+} from "@/lib/audio-debug"
+
 export interface AudioMLResult {
   genre: string
   genreConfidence: number
@@ -10,7 +17,11 @@ export interface AudioMLResult {
   valence: number
 }
 
-export function analyzeAudioFeatures(frequencyData: Uint8Array, bpm: number): AudioMLResult {
+// Store genre scores for confidence calculation
+let lastGenreScores: Record<string, number> = {}
+let lastMoodScores: Record<string, number> = {}
+
+export function analyzeAudioFeatures(frequencyData: Uint8Array, bpm: number, sampleRate: number = 44100): AudioMLResult {
   const bufferLength = frequencyData.length
 
   let bassEnergy = 0
@@ -18,8 +29,11 @@ export function analyzeAudioFeatures(frequencyData: Uint8Array, bpm: number): Au
   let highEnergy = 0
   let totalEnergy = 0
 
-  const bassEnd = Math.floor(bufferLength * 0.1)
-  const midEnd = Math.floor(bufferLength * 0.5)
+  // Use proper frequency-based bins matching use-audio-capture.ts (250Hz/2000Hz cutoffs)
+  const nyquist = sampleRate / 2
+  const binSize = nyquist / bufferLength
+  const bassEnd = Math.min(Math.floor(250 / binSize), bufferLength)
+  const midEnd = Math.min(Math.floor(2000 / binSize), bufferLength)
 
   for (let i = 0; i < bufferLength; i++) {
     const value = frequencyData[i] / 255
@@ -35,8 +49,8 @@ export function analyzeAudioFeatures(frequencyData: Uint8Array, bpm: number): Au
   }
 
   bassEnergy /= bassEnd || 1
-  midEnergy /= midEnd - bassEnd || 1
-  highEnergy /= bufferLength - midEnd || 1
+  midEnergy /= (midEnd - bassEnd) || 1
+  highEnergy /= (bufferLength - midEnd) || 1
   totalEnergy /= bufferLength
 
   let weightedSum = 0
@@ -45,7 +59,9 @@ export function analyzeAudioFeatures(frequencyData: Uint8Array, bpm: number): Au
     weightedSum += i * frequencyData[i]
     sum += frequencyData[i]
   }
-  const spectralCentroid = sum > 0 ? weightedSum / sum / bufferLength : 0.5
+  // Fixed: removed extra / bufferLength division that was incorrectly normalizing
+  // Normalize by dividing weighted average bin index by bufferLength once
+  const spectralCentroid = sum > 0 ? (weightedSum / sum) / bufferLength : 0.5
 
   let logSum = 0
   let arithmeticSum = 0
@@ -60,42 +76,82 @@ export function analyzeAudioFeatures(frequencyData: Uint8Array, bpm: number): Au
   const arithmeticMean = arithmeticSum / validCount
   const spectralFlatness = arithmeticMean > 0 ? geometricMean / arithmeticMean : 0
 
-  const genre = detectGenre(bassEnergy, midEnergy, highEnergy, spectralCentroid, spectralFlatness, bpm)
+  const { genre, scores: genreScores } = detectGenreWithScores(bassEnergy, midEnergy, highEnergy, spectralCentroid, spectralFlatness, bpm)
+  lastGenreScores = genreScores
 
   const energy = Math.min(1, totalEnergy * 2)
-  const valence = spectralCentroid * 0.6 + (1 - bassEnergy) * 0.4
+  // Improved valence calculation: combine brightness with harmonic content
+  const valence = spectralCentroid * 0.5 + (1 - bassEnergy) * 0.3 + midEnergy * 0.2
   const danceability = calculateDanceability(bpm, bassEnergy, energy)
 
-  let mood: "chill" | "energetic" | "sad" | "happy"
-  if (energy > 0.5 && valence > 0.5) {
-    mood = "happy"
-  } else if (energy > 0.5 && valence <= 0.5) {
-    mood = "energetic"
-  } else if (energy <= 0.5 && valence > 0.5) {
-    mood = "chill"
-  } else {
-    mood = "sad"
+  // Fixed mood logic:
+  // - "happy": high energy + high valence (bright, upbeat)
+  // - "energetic": high energy + low/mid valence (intense but not necessarily bright)
+  // - "chill": low energy + high valence (relaxed, pleasant)
+  // - "sad": low energy + low valence (slow, dark)
+  const moodScores = {
+    happy: (energy * 0.5 + valence * 0.5),
+    energetic: (energy * 0.7 + (1 - valence) * 0.3),
+    chill: ((1 - energy) * 0.5 + valence * 0.5),
+    sad: ((1 - energy) * 0.5 + (1 - valence) * 0.5),
   }
+  lastMoodScores = moodScores
+
+  // Pick mood with highest score
+  let mood: "chill" | "energetic" | "sad" | "happy" = "chill"
+  let maxMoodScore = 0
+  for (const [m, score] of Object.entries(moodScores)) {
+    if (score > maxMoodScore) {
+      maxMoodScore = score
+      mood = m as typeof mood
+    }
+  }
+
+  // Calculate real confidence based on score margins (not random!)
+  const sortedGenreScores = Object.values(genreScores).sort((a, b) => b - a)
+  const genreConfidence = sortedGenreScores.length > 1
+    ? Math.min(1, (sortedGenreScores[0] - sortedGenreScores[1]) / (sortedGenreScores[0] + 0.1) + 0.5)
+    : 0.7
+
+  const sortedMoodScores = Object.values(moodScores).sort((a, b) => b - a)
+  const moodConfidence = sortedMoodScores.length > 1
+    ? Math.min(1, (sortedMoodScores[0] - sortedMoodScores[1]) / 0.5 + 0.5)
+    : 0.7
+
+  // Log classification for debugging
+  const classificationInfo: ClassificationDebugInfo = {
+    genre,
+    genreScores,
+    mood,
+    moodScores,
+    spectralCentroid,
+    spectralFlatness,
+    bassEnergy,
+    midEnergy,
+    highEnergy,
+  }
+  logClassification(classificationInfo)
+  updateDebugState("classificationInfo", classificationInfo)
 
   return {
     genre,
-    genreConfidence: 0.7 + Math.random() * 0.2,
+    genreConfidence,
     mood,
-    moodConfidence: 0.7 + Math.random() * 0.2,
+    moodConfidence,
     danceability,
     energy,
     valence,
   }
 }
 
-function detectGenre(
+function detectGenreWithScores(
   bass: number,
   mid: number,
   high: number,
   brightness: number,
   flatness: number,
   bpm: number,
-): string {
+): { genre: string; scores: Record<string, number> } {
   const scores: Record<string, number> = {
     electronic: 0,
     "hip-hop": 0,
@@ -207,7 +263,7 @@ function detectGenre(
     }
   }
 
-  return detectedGenre
+  return { genre: detectedGenre, scores }
 }
 
 function calculateDanceability(bpm: number, bass: number, energy: number): number {
@@ -248,12 +304,16 @@ export function getSmoothedPrediction(result: AudioMLResult): AudioMLResult {
 
   const topMood = sortedMoods[0]
   const topMoodCount = topMood?.[1] || 0
-  const moodThreshold = len * 0.4
+  // Lowered threshold from 40% to 25% to be more responsive to mood changes
+  const moodThreshold = len * 0.25
 
   let finalMood: AudioMLResult["mood"] = "chill"
   if (topMoodCount >= moodThreshold) {
     finalMood = topMood[0] as AudioMLResult["mood"]
   }
+
+  // Log smoothing info for debugging
+  logSmoothing(len, genreCounts, moodCounts, sortedGenres[0]?.[0] || result.genre, finalMood)
 
   return {
     genre: sortedGenres[0]?.[0] || result.genre,

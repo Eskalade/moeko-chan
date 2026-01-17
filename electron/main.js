@@ -28,7 +28,9 @@ function createWindow() {
   // Load the Next.js app
   const isDev = process.env.NODE_ENV !== "production"
   if (isDev) {
-    mainWindow.loadURL("http://localhost:3000/desktop")
+    mainWindow.loadURL("http://localhost:3000/desktop?debug=1")
+    // Open DevTools in dev mode (detached so it doesn't resize the window)
+    mainWindow.webContents.openDevTools({ mode: "detach" })
   } else {
     mainWindow.loadFile(path.join(__dirname, "../out/desktop.html"))
   }
@@ -83,6 +85,15 @@ app.whenReady().then(() => {
       mainWindow.hide()
     } else {
       mainWindow?.show()
+    }
+  })
+
+  // Global shortcut to toggle DevTools (Cmd+Shift+I or Ctrl+Shift+I)
+  globalShortcut.register("CommandOrControl+Shift+I", () => {
+    if (mainWindow?.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools()
+    } else {
+      mainWindow?.webContents.openDevTools({ mode: "detach" })
     }
   })
 

@@ -1,9 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useAudioCapture, type AudioData, type Mood } from "@/hooks/use-audio-capture"
 import { Mic, Monitor, GripVertical, Bug, ImageIcon } from "lucide-react"
+import { getDebugState, isDebugEnabled } from "@/lib/audio-debug"
 
 const SPRITE_FRAMES: Record<Mood, string[]> = {
   chill: ["/sprites/chill-1.png", "/sprites/chill-2.png"],
@@ -33,14 +34,33 @@ const FRAME_SPEEDS: Record<Mood, number> = {
 }
 
 export default function DesktopPage() {
-  const [inputMode, setInputMode] = useState<"system" | "mic">("mic")
+  const [inputMode, setInputMode] = useState<"system" | "microphone">("microphone")
   const [showControls, setShowControls] = useState(false)
   const [useCustomSprites, setUseCustomSprites] = useState(true)
   const [showDebug, setShowDebug] = useState(false)
+  const [debugExpanded, setDebugExpanded] = useState(false)
   const [spritesLoaded, setSpritesLoaded] = useState(false)
   const [hasFrameSprites, setHasFrameSprites] = useState(false)
   const [spriteError, setSpriteError] = useState<string | null>(null)
   const { isListening, audioData, error, startCapture, stopCapture } = useAudioCapture(inputMode)
+
+  // Toggle debug with keyboard shortcut (Ctrl+Shift+D)
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.ctrlKey && e.shiftKey && e.key === "D") {
+      setShowDebug((prev) => !prev)
+      e.preventDefault()
+    }
+    // Toggle expanded debug with Ctrl+Shift+E
+    if (e.ctrlKey && e.shiftKey && e.key === "E") {
+      setDebugExpanded((prev) => !prev)
+      e.preventDefault()
+    }
+  }, [])
+
+  useEffect(() => {
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleKeyDown])
 
   useEffect(() => {
     const checkSprites = async () => {
@@ -94,11 +114,11 @@ export default function DesktopPage() {
         style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
       >
         <button
-          onClick={() => setInputMode(inputMode === "mic" ? "system" : "mic")}
+          onClick={() => setInputMode(inputMode === "microphone" ? "system" : "microphone")}
           className="p-1.5 rounded-full bg-black/50 hover:bg-black/70 text-white/70 hover:text-white transition-all"
-          title={inputMode === "mic" ? "Switch to System Audio" : "Switch to Microphone"}
+          title={inputMode === "microphone" ? "Switch to System Audio" : "Switch to Microphone"}
         >
-          {inputMode === "mic" ? <Mic className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
+          {inputMode === "microphone" ? <Mic className="w-3 h-3" /> : <Monitor className="w-3 h-3" />}
         </button>
         <button
           onClick={() => spritesLoaded && setUseCustomSprites(!useCustomSprites)}
@@ -133,72 +153,15 @@ export default function DesktopPage() {
 
       {/* Debug panel */}
       {showDebug && isListening && (
-        <div
-          className={`absolute ${spriteError && showControls ? "top-24" : "top-12"} left-2 right-2 bg-black/80 rounded-lg p-2 text-xs font-mono text-white/90 space-y-1`}
-          style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-        >
-          <div className="flex justify-between">
-            <span>BPM:</span>
-            <span className={audioData.bpm > 0 ? "text-green-400" : "text-red-400"}>
-              {audioData.bpm > 0 ? audioData.bpm : "detecting..."}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Genre:</span>
-            <span className="text-cyan-400">{audioData.genre}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Mood:</span>
-            <span
-              className={`${
-                audioData.mood === "chill"
-                  ? "text-blue-400"
-                  : audioData.mood === "happy"
-                    ? "text-yellow-400"
-                    : audioData.mood === "sad"
-                      ? "text-purple-400"
-                      : "text-orange-400"
-              }`}
-            >
-              {audioData.mood}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Energy:</span>
-            <div className="flex items-center gap-1">
-              <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-400 transition-all duration-100"
-                  style={{ width: `${audioData.energy * 100}%` }}
-                />
-              </div>
-              <span className="text-white/60">{(audioData.energy * 100).toFixed(0)}%</span>
-            </div>
-          </div>
-          <div className="flex justify-between">
-            <span>Bass:</span>
-            <div className="flex items-center gap-1">
-              <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-red-400 transition-all duration-100"
-                  style={{ width: `${audioData.bassLevel * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-between">
-            <span>Active:</span>
-            <span className={audioData.isActive ? "text-green-400" : "text-red-400"}>
-              {audioData.isActive ? "YES" : "NO"}
-            </span>
-          </div>
-          <div className="flex justify-between">
-            <span>Sprites:</span>
-            <span className={spritesLoaded ? "text-green-400" : "text-red-400"}>
-              {hasFrameSprites ? "Frames" : spritesLoaded ? "Single" : "Not found"}
-            </span>
-          </div>
-        </div>
+        <DebugPanel
+          audioData={audioData}
+          spriteError={spriteError}
+          showControls={showControls}
+          spritesLoaded={spritesLoaded}
+          hasFrameSprites={hasFrameSprites}
+          expanded={debugExpanded}
+          onToggleExpanded={() => setDebugExpanded(!debugExpanded)}
+        />
       )}
 
       {/* Character */}
@@ -556,4 +519,238 @@ function BlobMouth({ mood }: { mood: Mood }) {
     return <div className="w-8 h-4 border-b-[3px] border-slate-800 rounded-b-full" />
   }
   return <div className="w-5 h-2 border-b-[3px] border-slate-800 rounded-b-full" />
+}
+
+interface DebugPanelProps {
+  audioData: AudioData
+  spriteError: string | null
+  showControls: boolean
+  spritesLoaded: boolean
+  hasFrameSprites: boolean
+  expanded: boolean
+  onToggleExpanded: () => void
+}
+
+function DebugPanel({
+  audioData,
+  spriteError,
+  showControls,
+  spritesLoaded,
+  hasFrameSprites,
+  expanded,
+  onToggleExpanded,
+}: DebugPanelProps) {
+  const debugState = getDebugState()
+  const bpmInfo = debugState.bpmInfo
+  const classificationInfo = debugState.classificationInfo
+
+  // Get sorted genre scores for display
+  const sortedGenres = classificationInfo?.genreScores
+    ? Object.entries(classificationInfo.genreScores)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+    : []
+
+  // Get mood scores for display
+  const moodScores = classificationInfo?.moodScores || {}
+
+  return (
+    <div
+      className={`absolute ${spriteError && showControls ? "top-24" : "top-12"} left-2 right-2 bg-black/90 rounded-lg p-2 text-xs font-mono text-white/90 space-y-1 max-h-[70vh] overflow-y-auto`}
+      style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+    >
+      {/* Header with expand toggle */}
+      <div className="flex justify-between items-center border-b border-white/20 pb-1 mb-1">
+        <span className="text-white/50">Debug (Ctrl+Shift+D to toggle)</span>
+        <button
+          onClick={onToggleExpanded}
+          className="text-white/50 hover:text-white text-[10px] px-1"
+        >
+          {expanded ? "[-]" : "[+]"}
+        </button>
+      </div>
+
+      {/* Audio Presence Indicator */}
+      <div className="flex justify-between">
+        <span>Audio:</span>
+        <span className={audioData.maxFrequency > 10 ? "text-green-400" : "text-red-400"}>
+          {audioData.maxFrequency > 10 ? `YES (max: ${audioData.maxFrequency})` : `NO (noise: ${audioData.maxFrequency})`}
+        </span>
+      </div>
+
+      {/* BPM Section with Status */}
+      <div className="flex justify-between">
+        <span>BPM:</span>
+        <span className={audioData.bpm > 0 ? "text-green-400" : "text-yellow-400"}>
+          {audioData.bpm > 0
+            ? audioData.bpm
+            : audioData.bpmStatus === 'warming-up'
+              ? 'warming up...'
+              : audioData.bpmStatus === 'stabilizing'
+                ? `stabilizing (${audioData.beatCount} beats)`
+                : audioData.bpmStatus === 'lost'
+                  ? 'lost (was ' + (bpmInfo?.currentBpm || '?') + ')'
+                  : 'detecting...'}
+        </span>
+      </div>
+      {expanded && bpmInfo && (
+        <div className="pl-2 text-[10px] text-white/60 space-y-0.5">
+          <div>Custom: {bpmInfo.currentBpm} | Realtime: {bpmInfo.realtimeBpm}</div>
+          <div>Beats: {bpmInfo.beatCount} | Threshold: {bpmInfo.threshold.toFixed(3)}</div>
+          <div>Status: {audioData.bpmStatus}</div>
+        </div>
+      )}
+
+      {/* Genre Section */}
+      <div className="flex justify-between">
+        <span>Genre:</span>
+        <span className="text-cyan-400">
+          {audioData.genre}
+          <span className="text-white/40 ml-1">({(audioData.genreConfidence * 100).toFixed(0)}%)</span>
+        </span>
+      </div>
+      {expanded && sortedGenres.length > 0 && (
+        <div className="pl-2 text-[10px] text-white/60">
+          Top 3: {sortedGenres.map(([g, s]) => `${g}:${s.toFixed(1)}`).join(" | ")}
+        </div>
+      )}
+
+      {/* Mood Section */}
+      <div className="flex justify-between">
+        <span>Mood:</span>
+        <span
+          className={`${
+            audioData.mood === "chill"
+              ? "text-blue-400"
+              : audioData.mood === "happy"
+                ? "text-yellow-400"
+                : audioData.mood === "sad"
+                  ? "text-purple-400"
+                  : "text-orange-400"
+          }`}
+        >
+          {audioData.mood}
+          <span className="text-white/40 ml-1">({(audioData.moodConfidence * 100).toFixed(0)}%)</span>
+        </span>
+      </div>
+      {expanded && Object.keys(moodScores).length > 0 && (
+        <div className="pl-2 text-[10px] text-white/60 flex gap-2">
+          {Object.entries(moodScores).map(([m, s]) => (
+            <span key={m} className={m === audioData.mood ? "text-white/80" : ""}>
+              {m}: {(s as number).toFixed(2)}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Energy Bar */}
+      <div className="flex justify-between items-center">
+        <span>Energy:</span>
+        <div className="flex items-center gap-1">
+          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-green-400 transition-all duration-100"
+              style={{ width: `${audioData.energy * 100}%` }}
+            />
+          </div>
+          <span className="text-white/60 w-8 text-right">{(audioData.energy * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+
+      {/* Frequency Bars */}
+      <div className="flex justify-between items-center">
+        <span>Bass:</span>
+        <div className="flex items-center gap-1">
+          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-red-400 transition-all duration-100"
+              style={{ width: `${audioData.bassLevel * 100}%` }}
+            />
+          </div>
+          <span className="text-white/60 w-8 text-right">{(audioData.bassLevel * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+      <div className="flex justify-between items-center">
+        <span>Mid:</span>
+        <div className="flex items-center gap-1">
+          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-yellow-400 transition-all duration-100"
+              style={{ width: `${audioData.midLevel * 100}%` }}
+            />
+          </div>
+          <span className="text-white/60 w-8 text-right">{(audioData.midLevel * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+      <div className="flex justify-between items-center">
+        <span>Treble:</span>
+        <div className="flex items-center gap-1">
+          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-400 transition-all duration-100"
+              style={{ width: `${audioData.trebleLevel * 100}%` }}
+            />
+          </div>
+          <span className="text-white/60 w-8 text-right">{(audioData.trebleLevel * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+
+      {/* Expanded metrics */}
+      {expanded && classificationInfo && (
+        <>
+          <div className="border-t border-white/20 pt-1 mt-1">
+            <div className="text-white/50 mb-1">Spectral Analysis</div>
+            <div className="flex justify-between">
+              <span>Centroid:</span>
+              <span>{classificationInfo.spectralCentroid.toFixed(3)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Flatness:</span>
+              <span>{classificationInfo.spectralFlatness.toFixed(3)}</span>
+            </div>
+          </div>
+          <div className="border-t border-white/20 pt-1 mt-1">
+            <div className="text-white/50 mb-1">Additional</div>
+            <div className="flex justify-between">
+              <span>Danceability:</span>
+              <span>{(audioData.danceability * 100).toFixed(0)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Valence:</span>
+              <span>{(audioData.valence * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Status indicators */}
+      <div className="border-t border-white/20 pt-1 mt-1 flex justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <span>Active:</span>
+          <span className={audioData.isActive ? "text-green-400" : "text-red-400"}>
+            {audioData.isActive ? "YES" : "NO"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span>Beat:</span>
+          <span className={audioData.beat ? "text-green-400" : "text-white/40"}>
+            {audioData.beat ? "!" : "-"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <span>Sprites:</span>
+          <span className={spritesLoaded ? "text-green-400" : "text-red-400"}>
+            {hasFrameSprites ? "Frames" : spritesLoaded ? "Single" : "None"}
+          </span>
+        </div>
+      </div>
+
+      {/* Console logging hint */}
+      {expanded && (
+        <div className="text-[10px] text-white/40 pt-1 border-t border-white/20 mt-1">
+          Enable console logs: localStorage.setItem('VIBE_DEBUG', 'true')
+        </div>
+      )}
+    </div>
+  )
 }
