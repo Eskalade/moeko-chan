@@ -108,7 +108,12 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
       streamRef.current = null
     }
     if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close()
+      try {
+        audioContextRef.current.close()
+      } catch (err) {
+        // Ignore errors when closing AudioContext (can throw NotSupportedError in some cases)
+        console.warn("[AUDIO-DBG] AudioContext close error (safe to ignore):", err)
+      }
       audioContextRef.current = null
     }
     analyserRef.current = null
