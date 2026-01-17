@@ -6,17 +6,69 @@ import { Particles } from "@/components/particles"
 import { Button } from "@/components/ui/button"
 import { Mic, Square } from "lucide-react"
 import type { AudioData, Mood } from "@/components/music-companion"
+import { useState, useEffect, useRef } from "react"
 
 export default function PopoutPage() {
   const { isListening, audioData: rawAudioData, error, startCapture, stopCapture } = useAudioCapture()
 
+  // Mood stabilization (same logic as desktop for consistency)
+  const [displayedMood, setDisplayedMood] = useState<Mood>("chill")
+  const moodHistoryRef = useRef<Mood[]>([])
+  const lastMoodChangeRef = useRef(Date.now())
+  const MOOD_CHANGE_DELAY = 2000
+  const MOOD_HISTORY_SIZE = 100
+
+  useEffect(() => {
+    if (!isListening) {
+      setDisplayedMood("chill")
+      moodHistoryRef.current = []
+      lastMoodChangeRef.current = Date.now()
+      return
+    }
+
+    moodHistoryRef.current.push(rawAudioData.mood as Mood)
+    if (moodHistoryRef.current.length > MOOD_HISTORY_SIZE) {
+      moodHistoryRef.current.shift()
+    }
+
+    const timeSinceLastChange = Date.now() - lastMoodChangeRef.current
+    if (timeSinceLastChange < MOOD_CHANGE_DELAY) return
+
+    const moodCounts: Record<Mood, number> = { chill: 0, happy: 0, sad: 0, energetic: 0 }
+    moodHistoryRef.current.forEach((m) => moodCounts[m]++)
+
+    const total = moodHistoryRef.current.length
+    const threshold = total * 0.4
+
+    let dominantMood: Mood | null = null
+    for (const [mood, count] of Object.entries(moodCounts)) {
+      if (count >= threshold) {
+        dominantMood = mood as Mood
+        break
+      }
+    }
+
+    if (dominantMood && dominantMood !== displayedMood) {
+      console.log('[POPOUT-MOOD-DBG] Changing mood:', {
+        from: displayedMood,
+        to: dominantMood,
+        counts: moodCounts,
+        timeSinceLastChange,
+        historySize: moodHistoryRef.current.length
+      })
+      setDisplayedMood(dominantMood)
+      lastMoodChangeRef.current = Date.now()
+      moodHistoryRef.current = []
+    }
+  }, [rawAudioData.mood, isListening, displayedMood])
+
   const audioData: AudioData = {
     bpm: rawAudioData.bpm,
-    mood: rawAudioData.mood as Mood,
+    mood: displayedMood,
     energy: rawAudioData.energy,
     bass: rawAudioData.bassLevel,
     treble: rawAudioData.trebleLevel,
-    beat: rawAudioData.isActive && rawAudioData.bassLevel > 0.5,
+    beat: rawAudioData.beat,
   }
 
   const genre = rawAudioData.genre || "Unknown"

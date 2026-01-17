@@ -214,7 +214,7 @@ function DesktopBuddy({ audioData, isActive, useCustomSprites, hasFrameSprites }
 
   const moodHistoryRef = useRef<Mood[]>([])
   const lastMoodChangeRef = useRef(Date.now())
-  const MOOD_CHANGE_DELAY = 8000 // 8 seconds before mood can change
+  const MOOD_CHANGE_DELAY = 2000 // 2 seconds before mood can change (reduced from 8s for better responsiveness)
   const MOOD_HISTORY_SIZE = 100 // Track last 100 readings
 
   const frameTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -243,9 +243,9 @@ function DesktopBuddy({ audioData, isActive, useCustomSprites, hasFrameSprites }
     const moodCounts: Record<Mood, number> = { chill: 0, happy: 0, sad: 0, energetic: 0 }
     moodHistoryRef.current.forEach((m) => moodCounts[m]++)
 
-    // Find dominant mood (needs 60% majority)
+    // Find dominant mood (needs 40% majority - reduced from 60% for better responsiveness)
     const total = moodHistoryRef.current.length
-    const threshold = total * 0.6
+    const threshold = total * 0.4
 
     let dominantMood: Mood | null = null
     for (const [mood, count] of Object.entries(moodCounts)) {
@@ -257,6 +257,13 @@ function DesktopBuddy({ audioData, isActive, useCustomSprites, hasFrameSprites }
 
     // Only change if there's a clear dominant mood different from current
     if (dominantMood && dominantMood !== displayedMood) {
+      console.log('[MOOD-DBG] Changing mood:', {
+        from: displayedMood,
+        to: dominantMood,
+        counts: moodCounts,
+        timeSinceLastChange,
+        historySize: moodHistoryRef.current.length
+      })
       setDisplayedMood(dominantMood)
       lastMoodChangeRef.current = Date.now()
       moodHistoryRef.current = [] // Reset history after change
