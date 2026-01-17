@@ -5,6 +5,7 @@ import { useAudioCapture, type AudioMode } from "@/hooks/use-audio-capture"
 import { PNGTuber } from "./pngtuber"
 import { AudioVisualizer } from "./audio-visualizer"
 import { Particles } from "./particles"
+import { Waveform } from "./waveform"
 import { CharacterGenerator } from "./character-generator"
 import { Button } from "@/components/ui/button"
 import { MonitorSpeaker, Square, Mic, ExternalLink, Sparkles } from "lucide-react"
@@ -15,8 +16,6 @@ export interface AudioData {
   bpm: number
   mood: Mood
   energy: number
-  bass: number
-  treble: number
   beat: boolean
 }
 
@@ -28,17 +27,19 @@ export function MusicCompanion() {
 
   const audioData: AudioData = {
     bpm: rawAudioData.bpm,
+    bpmStatus: rawAudioData.bpmStatus,
+    beatCount: rawAudioData.beatCount,
     mood: rawAudioData.mood,
     energy: rawAudioData.energy,
-    bass: rawAudioData.bassLevel,
-    treble: rawAudioData.trebleLevel,
-    beat: rawAudioData.isActive && rawAudioData.bassLevel > 0.5,
+    beat: rawAudioData.beat,
+    isActive: rawAudioData.isActive,
+    valence: rawAudioData.valence,
+    moodConfidence: rawAudioData.moodConfidence,
+    maxFrequency: rawAudioData.maxFrequency,
+    frequencyData: rawAudioData.frequencyData,
   }
 
-  const genre = rawAudioData.genre || "Unknown"
-  const genreConfidence = rawAudioData.genreConfidence || 0
   const moodConfidence = rawAudioData.moodConfidence || 0
-  const danceability = rawAudioData.danceability || 0
 
   const handleStart = (mode: AudioMode) => {
     startCapture(mode)
@@ -71,6 +72,7 @@ export function MusicCompanion() {
 
       {/* Character Display */}
       <div className="relative w-80 h-80">
+        <Waveform frequencyData={rawAudioData.frequencyData} isActive={isListening} />
         <Particles audioData={audioData} isActive={isListening} />
         <PNGTuber audioData={audioData} isActive={isListening} customImage={customCharacter} />
       </div>
@@ -78,7 +80,7 @@ export function MusicCompanion() {
       {/* Audio Visualizer */}
       <AudioVisualizer audioData={audioData} isActive={isListening} />
 
-      {/* Stats Display - reorganized with ML-based genre/mood with confidence */}
+      {/* Stats Display - reorganized with ML-based mood with confidence */}
       <div className="flex gap-3 text-center flex-wrap justify-center">
         <div className="bg-card/50 rounded-xl px-5 py-3 backdrop-blur border border-border">
           <p className="text-2xl font-bold text-foreground">{audioData.bpm || "—"}</p>
@@ -93,16 +95,6 @@ export function MusicCompanion() {
         <div className="bg-card/50 rounded-xl px-5 py-3 backdrop-blur border border-border">
           <p className="text-2xl font-bold text-foreground">{Math.round(audioData.energy * 100)}%</p>
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Energy</p>
-        </div>
-        <div className="bg-card/50 rounded-xl px-5 py-3 backdrop-blur border border-border min-w-[100px]">
-          <p className="text-lg font-bold text-foreground capitalize">{genre}</p>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            Genre {genreConfidence > 0 && <span className="text-primary">({Math.round(genreConfidence * 100)}%)</span>}
-          </p>
-        </div>
-        <div className="bg-card/50 rounded-xl px-5 py-3 backdrop-blur border border-border">
-          <p className="text-2xl font-bold text-foreground">{Math.round(danceability * 100)}%</p>
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Danceable</p>
         </div>
       </div>
 

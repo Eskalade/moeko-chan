@@ -30,7 +30,7 @@ let debugFrameCount = 0
 const DEBUG_LOG_INTERVAL = 30
 
 // Unified audio settings
-const AUDIO_MULTIPLIER = 3
+const AUDIO_MULTIPLIER = 5
 const SILENCE_THRESHOLD = 0.03
 
 export type AudioMode = "system" | "microphone"
@@ -48,18 +48,13 @@ export interface AudioData {
 	bpmStatus: BpmStatus
 	beatCount: number
 	energy: number
-	bassLevel: number
-	midLevel: number
-	trebleLevel: number
 	mood: Mood
-	genre: string
 	isActive: boolean
-	danceability: number
 	valence: number
-	genreConfidence: number
 	moodConfidence: number
 	beat: boolean
 	maxFrequency: number // For debugging: max value in frequency data
+	frequencyData: number[] // Waveform visualization data
 }
 
 const defaultAudioData: AudioData = {
@@ -67,18 +62,13 @@ const defaultAudioData: AudioData = {
 	bpmStatus: "idle",
 	beatCount: 0,
 	energy: 0,
-	bassLevel: 0,
-	midLevel: 0,
-	trebleLevel: 0,
 	mood: "chill", // Default mood is chill
-	genre: "Unknown",
 	isActive: false,
-	danceability: 0,
 	valence: 0,
-	genreConfidence: 0,
 	moodConfidence: 0,
 	beat: false,
-	maxFrequency: 0
+	maxFrequency: 0,
+	frequencyData: []
 }
 
 export function useAudioCapture(mode: AudioMode = "microphone") {
@@ -198,27 +188,17 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
 		// Unified gain multiplier for consistent levels
 		// RAW values for beat detection (can exceed 1.0 to detect transients)
 		const rawBassLevel = (bassSum / (bassEndBin * 255)) * AUDIO_MULTIPLIER
-		// CAPPED values for display (0-1 range)
-		const bassLevel = Math.min(1, rawBassLevel)
-		const midLevel = Math.min(
+		const energy = Math.min(
 			1,
-			(midSum / ((midEndBin - bassEndBin) * 255)) * AUDIO_MULTIPLIER
+			(totalSum / (bufferLength * 255)) * AUDIO_MULTIPLIER
 		)
-		const trebleLevel = Math.min(
-			1,
-			(trebleSum / ((bufferLength - midEndBin) * 255)) * AUDIO_MULTIPLIER
-		)
-		const energy = Math.min(1, (totalSum / (bufferLength * 255)) * AUDIO_MULTIPLIER)
 
 		// Verbose debug logging for levels
 		if (isVerboseDebug && debugFrameCount % DEBUG_LOG_INTERVAL === 0) {
 			console.log("[AUDIO-DBG] Levels:", {
 				multiplier: AUDIO_MULTIPLIER,
 				energy: energy.toFixed(4),
-				bass: bassLevel.toFixed(4),
 				rawBass: rawBassLevel.toFixed(4),
-				mid: midLevel.toFixed(4),
-				treble: trebleLevel.toFixed(4),
 				maxFreq: maxFrequency,
 				totalSum,
 				bufferLength
@@ -240,9 +220,6 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
 		// Log audio metrics for debugging
 		const audioMetrics: AudioMetrics = {
 			energy,
-			bassLevel,
-			midLevel,
-			trebleLevel,
 			isActive: energy >= SILENCE_THRESHOLD,
 			isSilent,
 			silenceCount: silenceCountRef.current
@@ -253,14 +230,14 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
 		const now = performance.now()
 		// Use RAW bass level for beat detection (can exceed 1.0 to detect transients)
 		energyHistoryRef.current.push(rawBassLevel)
-		if (energyHistoryRef.current.length > 50) {
+		if (energyHistoryRef.current.length > 30) {
 			energyHistoryRef.current.shift()
 		}
 
 		const avgEnergy =
 			energyHistoryRef.current.reduce((a, b) => a + b, 0) /
 			energyHistoryRef.current.length
-		const threshold = avgEnergy * 1.3
+		const threshold = avgEnergy * 1.2
 
 		let isBeat = false
 		let lastInterval = 0
@@ -274,16 +251,16 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
 				diff: (rawBassLevel - threshold).toFixed(4),
 				aboveThreshold: rawBassLevel > threshold,
 				timeSinceLast: timeSinceLastBeat.toFixed(0) + "ms",
-				canTrigger: timeSinceLastBeat > 200,
-				minEnergyMet: rawBassLevel > 0.1
+				canTrigger: timeSinceLastBeat > 150,
+				minEnergyMet: rawBassLevel > 0.05
 			})
 		}
 
 		// Use RAW bass level for beat detection + require minimum energy to avoid false positives
 		if (
 			rawBassLevel > threshold &&
-			rawBassLevel > 0.1 &&
-			timeSinceLastBeat > 200
+			rawBassLevel > 0.05 &&
+			timeSinceLastBeat > 150
 		) {
 			beatTimesRef.current.push(now)
 			lastInterval = timeSinceLastBeat
@@ -321,7 +298,7 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
 							currentBpmRef.current = calculatedBpm
 						} else {
 							currentBpmRef.current = Math.round(
-								currentBpmRef.current * 0.8 + calculatedBpm * 0.2
+								currentBpmRef.current * 0.6 + calculatedBpm * 0.4
 							)
 						}
 						// Preserve valid BPM
@@ -422,224 +399,218 @@ export function useAudioCapture(mode: AudioMode = "microphone") {
 				bpmStatus,
 				beatCount,
 				energy,
-				bassLevel,
-				midLevel,
-				trebleLevel,
 				mood: smoothedResult.mood,
-				genre: smoothedResult.genre,
 				isActive: energy >= SILENCE_THRESHOLD, // Fixed: was 0.02, now matches silence threshold 0.05
-				danceability: smoothedResult.danceability,
 				valence: smoothedResult.valence,
-				genreConfidence: smoothedResult.genreConfidence,
 				moodConfidence: smoothedResult.moodConfidence,
 				beat: isBeat,
-				maxFrequency
+				maxFrequency,
+				frequencyData: Array.from(
+					dataArray.slice(0, Math.floor(dataArray.length * 0.6))
+				)
+					.filter((_, i) => i % Math.floor((dataArray.length * 0.6) / 64) === 0)
+					.slice(0, 64) // Sample first 60% of spectrum (exclude very high frequencies)
 			})
 		}
 
 		animationFrameRef.current = requestAnimationFrame(analyze)
 	}, [])
 
-	const startCapture = useCallback(
-		async () => {
-			setError(null)
-			cleanup()
-			resetPredictionHistory()
+	const startCapture = useCallback(async () => {
+		setError(null)
+		cleanup()
+		resetPredictionHistory()
+
+		try {
+			let stream: MediaStream
+
+			if (mode === "system") {
+				// Check if running in Electron with loopback available
+				const electronAPI = (window as any).electronAPI
+
+				if (electronAPI?.enableLoopbackAudio) {
+					// Enable loopback before getDisplayMedia
+					if (isVerboseDebug) {
+						console.log("[AUDIO-DBG] Using Electron audio loopback")
+					}
+					await electronAPI.enableLoopbackAudio()
+
+					// MUST request video: true for the library to intercept
+					stream = await navigator.mediaDevices.getDisplayMedia({
+						video: true,
+						audio: true
+					})
+
+					// Remove video tracks immediately
+					stream.getVideoTracks().forEach(t => {
+						t.stop()
+						stream.removeTrack(t)
+					})
+
+					// Disable loopback after getting stream
+					await electronAPI.disableLoopbackAudio()
+				} else {
+					// Fallback for non-Electron (web browser) or loopback device
+					const devices = await navigator.mediaDevices.enumerateDevices()
+					const loopbackDevice = devices.find(
+						d =>
+							d.kind === "audioinput" &&
+							(d.label.toLowerCase().includes("loopback") ||
+								d.label.toLowerCase().includes("system audio"))
+					)
+
+					if (loopbackDevice) {
+						if (isVerboseDebug) {
+							console.log(
+								"[AUDIO-DBG] Found loopback device:",
+								loopbackDevice.label
+							)
+						}
+						stream = await navigator.mediaDevices.getUserMedia({
+							audio: { deviceId: { exact: loopbackDevice.deviceId } }
+						})
+					} else {
+						if (isVerboseDebug) {
+							console.log(
+								"[AUDIO-DBG] No loopback device found, using getDisplayMedia fallback"
+							)
+						}
+						stream = await navigator.mediaDevices.getDisplayMedia({
+							audio: {
+								echoCancellation: false,
+								noiseSuppression: false
+							},
+							video: { width: 1, height: 1, frameRate: 1 }
+						})
+						// Stop video track, keep only audio
+						stream.getVideoTracks().forEach(t => t.stop())
+					}
+				}
+			} else {
+				// Microphone mode (default)
+				stream = await navigator.mediaDevices.getUserMedia({
+					audio: {
+						echoCancellation: false,
+						noiseSuppression: false,
+						autoGainControl: false
+					}
+				})
+			}
+
+			streamRef.current = stream
+
+			const audioContext = new AudioContext()
+			if (audioContext.state === "suspended") await audioContext.resume()
+			audioContextRef.current = audioContext
+
+			const analyser = audioContext.createAnalyser()
+			analyser.fftSize = 4096
+			analyser.smoothingTimeConstant = 0.8
+			analyserRef.current = analyser
+
+			const source = audioContext.createMediaStreamSource(stream)
+			source.connect(analyser)
 
 			try {
-				let stream: MediaStream
-
-				if (mode === "system") {
-					// Check if running in Electron with loopback available
-					const electronAPI = (window as any).electronAPI
-
-					if (electronAPI?.enableLoopbackAudio) {
-						// Enable loopback before getDisplayMedia
-						if (isVerboseDebug) {
-							console.log("[AUDIO-DBG] Using Electron audio loopback")
-						}
-						await electronAPI.enableLoopbackAudio()
-
-						// MUST request video: true for the library to intercept
-						stream = await navigator.mediaDevices.getDisplayMedia({
-							video: true,
-							audio: true
-						})
-
-						// Remove video tracks immediately
-						stream.getVideoTracks().forEach(t => {
-							t.stop()
-							stream.removeTrack(t)
-						})
-
-						// Disable loopback after getting stream
-						await electronAPI.disableLoopbackAudio()
-					} else {
-						// Fallback for non-Electron (web browser) or loopback device
-						const devices = await navigator.mediaDevices.enumerateDevices()
-						const loopbackDevice = devices.find(
-							d =>
-								d.kind === "audioinput" &&
-								(d.label.toLowerCase().includes("loopback") ||
-									d.label.toLowerCase().includes("system audio"))
-						)
-
-						if (loopbackDevice) {
-							if (isVerboseDebug) {
-								console.log(
-									"[AUDIO-DBG] Found loopback device:",
-									loopbackDevice.label
-								)
-							}
-							stream = await navigator.mediaDevices.getUserMedia({
-								audio: { deviceId: { exact: loopbackDevice.deviceId } }
-							})
-						} else {
-							if (isVerboseDebug) {
-								console.log(
-									"[AUDIO-DBG] No loopback device found, using getDisplayMedia fallback"
-								)
-							}
-							stream = await navigator.mediaDevices.getDisplayMedia({
-								audio: {
-									echoCancellation: false,
-									noiseSuppression: false
-								},
-								video: { width: 1, height: 1, frameRate: 1 }
-							})
-							// Stop video track, keep only audio
-							stream.getVideoTracks().forEach(t => t.stop())
-						}
+				const realtimeBpmProcessor = await createRealTimeBpmProcessor(
+					audioContext,
+					{
+						continuousAnalysis: true,
+						stabilizationTime: 3_000 // REDUCED from 10_000 for faster detection
 					}
-				} else {
-					// Microphone mode (default)
-					stream = await navigator.mediaDevices.getUserMedia({
-						audio: {
-							echoCancellation: false,
-							noiseSuppression: false,
-							autoGainControl: false
-						}
-					})
+				)
+
+				if (isVerboseDebug) {
+					console.log(
+						"[AUDIO-DBG] Realtime BPM analyzer initialized with 3s stabilization"
+					)
+					console.log(
+						"[AUDIO-DBG] Processor type:",
+						typeof realtimeBpmProcessor,
+						"keys:",
+						Object.keys(realtimeBpmProcessor)
+					)
 				}
 
-				streamRef.current = stream
+				// The realtime-bpm-analyzer returns an object with a 'port' property for messaging
+				// and may have different connection semantics. Try multiple approaches.
 
-				const audioContext = new AudioContext()
-				if (audioContext.state === "suspended") await audioContext.resume()
-				audioContextRef.current = audioContext
-
-				const analyser = audioContext.createAnalyser()
-				analyser.fftSize = 4096
-				analyser.smoothingTimeConstant = 0.8
-				analyserRef.current = analyser
-
-				const source = audioContext.createMediaStreamSource(stream)
-				source.connect(analyser)
-
-				try {
-					const realtimeBpmProcessor = await createRealTimeBpmProcessor(
-						audioContext,
-						{
-							continuousAnalysis: true,
-							stabilizationTime: 3_000 // REDUCED from 10_000 for faster detection
-						}
-					)
+				// Check if it's a proper AudioWorkletNode with connect method
+				if (
+					realtimeBpmProcessor &&
+					typeof (realtimeBpmProcessor as AudioWorkletNode).connect ===
+						"function"
+				) {
+					source.connect(realtimeBpmProcessor as unknown as AudioNode)
+					bpmProcessorRef.current =
+						realtimeBpmProcessor as unknown as AudioWorkletNode
 
 					if (isVerboseDebug) {
 						console.log(
-							"[AUDIO-DBG] Realtime BPM analyzer initialized with 3s stabilization"
-						)
-						console.log(
-							"[AUDIO-DBG] Processor type:",
-							typeof realtimeBpmProcessor,
-							"keys:",
-							Object.keys(realtimeBpmProcessor)
+							"[AUDIO-DBG] Connected via standard AudioNode.connect()"
 						)
 					}
-
-					// The realtime-bpm-analyzer returns an object with a 'port' property for messaging
-					// and may have different connection semantics. Try multiple approaches.
-
-					// Check if it's a proper AudioWorkletNode with connect method
-					if (
-						realtimeBpmProcessor &&
-						typeof (realtimeBpmProcessor as AudioWorkletNode).connect ===
-							"function"
-					) {
-						source.connect(realtimeBpmProcessor as unknown as AudioNode)
-						bpmProcessorRef.current =
-							realtimeBpmProcessor as unknown as AudioWorkletNode
-
-						if (isVerboseDebug) {
-							console.log(
-								"[AUDIO-DBG] Connected via standard AudioNode.connect()"
-							)
-						}
-					} else {
-						// Some versions of the library expose a different API
-						console.warn(
-							"[AUDIO-DBG] realtime-bpm-analyzer returned non-standard object, skipping connection"
-						)
-					}
-
-					// Set up message handler for BPM results
-					const processorNode =
-						realtimeBpmProcessor as unknown as AudioWorkletNode
-					if (processorNode?.port) {
-						processorNode.port.onmessage = (event: MessageEvent) => {
-							if (isVerboseDebug) {
-								console.log("[AUDIO-DBG] Realtime BPM event:", event.data)
-							}
-
-							if (event.data?.result?.bpm?.length > 0) {
-								const topCandidate = event.data.result.bpm[0]
-								if (topCandidate?.tempo) {
-									const tempo = Math.round(topCandidate.tempo)
-									// Store in separate ref so it doesn't get overwritten on silence
-									realtimeBpmRef.current = tempo
-									// Also update current and valid refs
-									currentBpmRef.current = tempo
-									lastValidBpmRef.current = tempo
-
-									if (isVerboseDebug) {
-										console.log(
-											"[AUDIO-DBG] Realtime BPM detected:",
-											tempo,
-											"candidates:",
-											event.data.result.bpm.length
-										)
-									}
-									logRealtimeBpmUpdate(tempo, event.data.result.bpm.length)
-								}
-							}
-						}
-					}
-				} catch (bpmErr) {
-					// This is fine - our custom beat detection will work as fallback
+				} else {
+					// Some versions of the library expose a different API
 					console.warn(
-						"[AUDIO-DBG] realtime-bpm-analyzer setup failed, using custom beat detection:",
-						bpmErr
+						"[AUDIO-DBG] realtime-bpm-analyzer returned non-standard object, skipping connection"
 					)
 				}
 
-				// Track start time for warmup period
-				startTimeRef.current = Date.now()
-				if (isVerboseDebug) {
-					console.log(
-						`[AUDIO-DBG] Audio capture started (${mode} mode)`
-					)
-				}
+				// Set up message handler for BPM results
+				const processorNode =
+					realtimeBpmProcessor as unknown as AudioWorkletNode
+				if (processorNode?.port) {
+					processorNode.port.onmessage = (event: MessageEvent) => {
+						if (isVerboseDebug) {
+							console.log("[AUDIO-DBG] Realtime BPM event:", event.data)
+						}
 
-				setIsListening(true)
-				analyze()
-			} catch (err) {
-				console.error("[AUDIO] Capture error:", err)
-				setError(err instanceof Error ? err.message : "Failed to capture audio")
-				cleanup()
+						if (event.data?.result?.bpm?.length > 0) {
+							const topCandidate = event.data.result.bpm[0]
+							if (topCandidate?.tempo) {
+								const tempo = Math.round(topCandidate.tempo)
+								// Store in separate ref so it doesn't get overwritten on silence
+								realtimeBpmRef.current = tempo
+								// Also update current and valid refs
+								currentBpmRef.current = tempo
+								lastValidBpmRef.current = tempo
+
+								if (isVerboseDebug) {
+									console.log(
+										"[AUDIO-DBG] Realtime BPM detected:",
+										tempo,
+										"candidates:",
+										event.data.result.bpm.length
+									)
+								}
+								logRealtimeBpmUpdate(tempo, event.data.result.bpm.length)
+							}
+						}
+					}
+				}
+			} catch (bpmErr) {
+				// This is fine - our custom beat detection will work as fallback
+				console.warn(
+					"[AUDIO-DBG] realtime-bpm-analyzer setup failed, using custom beat detection:",
+					bpmErr
+				)
 			}
-		},
-		[mode, analyze, cleanup]
-	)
+
+			// Track start time for warmup period
+			startTimeRef.current = Date.now()
+			if (isVerboseDebug) {
+				console.log(`[AUDIO-DBG] Audio capture started (${mode} mode)`)
+			}
+
+			setIsListening(true)
+			analyze()
+		} catch (err) {
+			console.error("[AUDIO] Capture error:", err)
+			setError(err instanceof Error ? err.message : "Failed to capture audio")
+			cleanup()
+		}
+	}, [mode, analyze, cleanup])
 
 	const stopCapture = useCallback(() => {
 		cleanup()

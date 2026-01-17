@@ -563,13 +563,6 @@ function DebugPanel({
   const bpmInfo = debugState.bpmInfo
   const classificationInfo = debugState.classificationInfo
 
-  // Get sorted genre scores for display
-  const sortedGenres = classificationInfo?.genreScores
-    ? Object.entries(classificationInfo.genreScores)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-    : []
-
   // Get mood scores for display
   const moodScores = classificationInfo?.moodScores || {}
 
@@ -620,20 +613,6 @@ function DebugPanel({
         </div>
       )}
 
-      {/* Genre Section */}
-      <div className="flex justify-between">
-        <span>Genre:</span>
-        <span className="text-cyan-400">
-          {audioData.genre}
-          <span className="text-white/40 ml-1">({(audioData.genreConfidence * 100).toFixed(0)}%)</span>
-        </span>
-      </div>
-      {expanded && sortedGenres.length > 0 && (
-        <div className="pl-2 text-[10px] text-white/60">
-          Top 3: {sortedGenres.map(([g, s]) => `${g}:${s.toFixed(1)}`).join(" | ")}
-        </div>
-      )}
-
       {/* Mood Section */}
       <div className="flex justify-between">
         <span>Mood:</span>
@@ -667,49 +646,11 @@ function DebugPanel({
         <div className="flex items-center gap-1">
           <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
             <div
-              className="h-full bg-green-400 transition-all duration-100"
+              className="h-full bg-green-400"
               style={{ width: `${audioData.energy * 100}%` }}
             />
           </div>
           <span className="text-white/60 w-8 text-right">{(audioData.energy * 100).toFixed(0)}%</span>
-        </div>
-      </div>
-
-      {/* Frequency Bars */}
-      <div className="flex justify-between items-center">
-        <span>Bass:</span>
-        <div className="flex items-center gap-1">
-          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-red-400 transition-all duration-100"
-              style={{ width: `${audioData.bassLevel * 100}%` }}
-            />
-          </div>
-          <span className="text-white/60 w-8 text-right">{(audioData.bassLevel * 100).toFixed(0)}%</span>
-        </div>
-      </div>
-      <div className="flex justify-between items-center">
-        <span>Mid:</span>
-        <div className="flex items-center gap-1">
-          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-yellow-400 transition-all duration-100"
-              style={{ width: `${audioData.midLevel * 100}%` }}
-            />
-          </div>
-          <span className="text-white/60 w-8 text-right">{(audioData.midLevel * 100).toFixed(0)}%</span>
-        </div>
-      </div>
-      <div className="flex justify-between items-center">
-        <span>Treble:</span>
-        <div className="flex items-center gap-1">
-          <div className="w-16 h-2 bg-white/20 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-400 transition-all duration-100"
-              style={{ width: `${audioData.trebleLevel * 100}%` }}
-            />
-          </div>
-          <span className="text-white/60 w-8 text-right">{(audioData.trebleLevel * 100).toFixed(0)}%</span>
         </div>
       </div>
 
@@ -730,12 +671,51 @@ function DebugPanel({
           <div className="border-t border-white/20 pt-1 mt-1">
             <div className="text-white/50 mb-1">Additional</div>
             <div className="flex justify-between">
-              <span>Danceability:</span>
-              <span>{(audioData.danceability * 100).toFixed(0)}%</span>
-            </div>
-            <div className="flex justify-between">
               <span>Valence:</span>
               <span>{(audioData.valence * 100).toFixed(0)}%</span>
+            </div>
+          </div>
+          <div className="border-t border-white/20 pt-1 mt-1">
+            <div className="text-white/50 mb-1">Waveform</div>
+            <div className="relative h-16 bg-black/30 rounded">
+              <canvas
+                ref={(canvas) => {
+                  if (!canvas) return
+                  const ctx = canvas.getContext("2d")
+                  if (!ctx) return
+
+                  const width = canvas.width
+                  const height = canvas.height
+
+                  ctx.clearRect(0, 0, width, height)
+
+                  if (!audioData.isActive || !audioData.frequencyData || audioData.frequencyData.length === 0) return
+
+                  const barCount = audioData.frequencyData.length
+                  const barWidth = width / barCount
+                  const gap = 1
+
+                  audioData.frequencyData.forEach((value, i) => {
+                    const normalizedValue = value / 255
+                    const barHeight = Math.min(height, normalizedValue * height) // Natural height without stretching
+
+                    const x = i * barWidth
+                    const y = height - barHeight
+
+                    const hue = 270
+                    const opacity = 0.3 + normalizedValue * 0.6
+
+                    ctx.fillStyle = `hsla(${hue}, 70%, 60%, ${opacity})`
+                    ctx.fillRect(x, y, barWidth - gap, barHeight)
+                  })
+                }}
+                width={300}
+                height={64}
+                className="w-full h-full"
+              />
+            </div>
+            <div className="text-[10px] text-white/40 mt-0.5">
+              Samples: {audioData.frequencyData?.length || 0}
             </div>
           </div>
         </>

@@ -15,14 +15,12 @@ export function AudioVisualizer({ audioData, isActive }: AudioVisualizerProps) {
       {[...Array(bars)].map((_, i) => {
         // Create a wave pattern based on position and audio data
         const position = i / bars
-        const isLeftHalf = position < 0.5
         const distFromCenter = Math.abs(position - 0.5) * 2
 
-        // Mix bass and treble based on position
-        const bassInfluence = isLeftHalf ? 1 - distFromCenter : distFromCenter
-        const trebleInfluence = 1 - bassInfluence
+        // Height based on energy with wave pattern
+        const waveInfluence = 1 - distFromCenter * 0.3
 
-        const height = isActive ? 8 + (audioData.bass * bassInfluence + audioData.treble * trebleInfluence) * 48 : 8
+        const height = isActive ? 8 + (audioData.energy * waveInfluence) * 48 : 8
 
         const hue = 180 + position * 60 // Cyan to teal gradient
 
