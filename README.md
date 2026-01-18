@@ -6,7 +6,7 @@ Moeko-chan is a cute desktop companion that lives on your screen and vibes to yo
 ## ✨ Features
 
 - **🎨 Immersive Desktop Spirit** – Moeko-chan floats on your desktop as a transparent, always-on-top widget. She sits above your code, your games, and your browser!
-- **🧠 Intelligent Mood Sync** – Using real-time ML heuristics, Moeko-chan transitions between 5 distinct moods: **Chill, Energetic, Happy, Sad,** and **Sleep**.
+- **🧠 Intelligent Mood Sync** – Using real-time ML heuristics, Moeko-chan transitions between 4 distinct moods: **Chill, Energetic, Happy,** and **Sleep**.
 - **🥁 Custom BPM Engine** – Built with a high-accuracy bass-isolation filter. By ignoring vocals and melodies, Moeko-chan "hears" the kick drum, ensuring her bounces are perfectly in sync with the beat.
 - **💤 Signature Sleep Mode** – If the room goes quiet for more than 5 seconds, Moeko-chan will close her eyes and drift into a slow breathing animation until the music starts again.
 - **👁️ Immersive Mode** – Press `Ctrl + L` to hide all UI buttons and her background glow. Moeko-chan becomes a clean, floating sticker on your screen for maximum cuteness.
