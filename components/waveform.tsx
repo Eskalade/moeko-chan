@@ -34,6 +34,7 @@ export function Waveform({ frequencyData, isActive }: WaveformProps) {
          const normalizedValue = value / 255
          const barHeight = Math.min(height, normalizedValue * height) // Natural height without stretching
          const y = height - barHeight // Anchor to bottom
+         const x = i * barWidth // Calculate x position based on index
 
          // Color gradient based on height
          const hue = 270 // Purple
