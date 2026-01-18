@@ -10,18 +10,7 @@ Moeko-chan is a cute desktop companion that lives on your screen and vibes to yo
 - **💤 Signature Sleep Mode** – If the room goes quiet for more than 5 seconds, Moeko-chan will close her eyes and drift into a slow breathing animation until the music starts again.
 - **👁️ Immersive Mode** – Press `Ctrl + L` to hide all UI buttons and her background glow. Moeko-chan becomes a clean, floating sticker on your screen for maximum cuteness.
 - **✨ Physics-Based Animation** – Moeko-chan uses spring physics for her bops and squashes, making her feel soft, squishy, and alive.
-
-## ⌨️ Controls & Hotkeys
-
-| Control | Action |
-|---------|--------|
-| `Ctrl + L` | **Toggle Immersive Mode** (Hides UI & Background Glow) |
-| `Ctrl + Shift + D` | **Toggle Moeko's Brain** (Debug Panel) |
-| `Ctrl + Shift + E` | **Expand Brain Metrics** (Waveform & Spectral Data) |
-| **Eye Icon** | Toggle Immersive Mode manually |
-| **Start/Stop Button** | Wake Moeko-chan up and start the audio analysis |
-
----
+  
 
 ## 🚀 Installation & Setup
 
@@ -51,10 +40,7 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 | `Ctrl/Cmd + Shift + T` | Toggle transparent mode (character only, no glow/UI) |
 | `Ctrl/Cmd + Shift + D` | Toggle debug panel |
 | `Ctrl/Cmd + Shift + E` | Toggle expanded debug info |
-| Mic/Monitor button | Toggle between microphone and system audio mode |
 | Mood dropdown (top-left) | Lock mood to a specific animation |
-| Tray Icon > Toggle Click-Through | Make window click-through |
-| Tray Icon > Reset Position | Move back to default position |
 | Drag window | Reposition the companion |
 
 ## Audio Metrics
